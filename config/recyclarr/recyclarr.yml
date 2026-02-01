@@ -1,0 +1,53 @@
+# =============================================================================
+# RECYCLARR CONFIGURATION
+# =============================================================================
+# Syncs TRaSH Guides quality profiles to Sonarr and Radarr
+# Place this in ${APPDATA_PATH}/recyclarr/recyclarr.yml
+#
+# Documentation: https://recyclarr.dev/wiki/yaml/configuration-reference/
+# TRaSH Guides: https://trash-guides.info/
+# =============================================================================
+
+# Sonarr Configuration
+sonarr:
+  series:
+    # Your Sonarr instance
+    base_url: http://sonarr:8989
+    api_key: YOUR_SONARR_API_KEY  # Get from Sonarr → Settings → General
+
+    # Quality definitions from TRaSH
+    quality_definition:
+      type: series
+
+    # Include TRaSH recommended settings
+    include:
+      # WEB-1080p profile (recommended for most users)
+      - template: sonarr-quality-definition-series
+      - template: sonarr-v4-quality-profile-web-1080p
+      - template: sonarr-v4-custom-formats-web-1080p
+
+    # Uncomment for 4K content
+    # - template: sonarr-v4-quality-profile-web-2160p
+    # - template: sonarr-v4-custom-formats-web-2160p
+
+# Radarr Configuration
+radarr:
+  movies:
+    # Your Radarr instance
+    base_url: http://radarr:7878
+    api_key: YOUR_RADARR_API_KEY  # Get from Radarr → Settings → General
+
+    # Quality definitions from TRaSH
+    quality_definition:
+      type: movie
+
+    # Include TRaSH recommended settings
+    include:
+      # HD Bluray + WEB profile (recommended for most users)
+      - template: radarr-quality-definition-movie
+      - template: radarr-quality-profile-hd-bluray-web
+      - template: radarr-custom-formats-hd-bluray-web
+
+    # Uncomment for 4K content
+    # - template: radarr-quality-profile-uhd-bluray-web
+    # - template: radarr-custom-formats-uhd-bluray-web

@@ -1,0 +1,128 @@
+# =============================================================================
+# MEDIA REQUESTS & DISCOVERY
+# =============================================================================
+# - Jellyseerr: Request movies/TV shows with a Netflix-like UI
+# - Bazarr: Automatic subtitle downloads
+# - Recyclarr: Sync TRaSH Guides quality profiles
+# - FlareSolverr: Cloudflare bypass for indexers (if needed)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Jellyseerr - Media Request Interface
+  # ---------------------------------------------------------------------------
+  # THIS IS HOW YOU REQUEST MOVIES/SHOWS!
+  # Access: http://server-ip:5055
+  #
+  # Users browse, search, and request media through this interface.
+  # Requests automatically go to Radarr/Sonarr for downloading.
+  # ---------------------------------------------------------------------------
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    hostname: jellyseerr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "5055:5055"
+    environment:
+      - TZ=${TZ}
+      - LOG_LEVEL=info
+    volumes:
+      - ${APPDATA_PATH}/jellyseerr:/app/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jellyseerr.rule=Host(`requests.${DOMAIN}`)"
+      - "traefik.http.routers.jellyseerr.entrypoints=websecure"
+      - "traefik.http.routers.jellyseerr.tls.certresolver=cloudflare"
+      - "traefik.http.services.jellyseerr.loadbalancer.server.port=5055"
+
+  # ---------------------------------------------------------------------------
+  # Bazarr - Subtitle Management
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:6767
+  # Automatically downloads subtitles for all your media
+  # ---------------------------------------------------------------------------
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    hostname: bazarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "6767:6767"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/bazarr:/config
+      - ${MEDIA_PATH}:/media
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bazarr.rule=Host(`bazarr.${DOMAIN}`)"
+      - "traefik.http.routers.bazarr.entrypoints=websecure"
+      - "traefik.http.routers.bazarr.tls.certresolver=cloudflare"
+      - "traefik.http.services.bazarr.loadbalancer.server.port=6767"
+
+  # ---------------------------------------------------------------------------
+  # Recyclarr - TRaSH Guides Sync
+  # ---------------------------------------------------------------------------
+  # Automatically syncs quality profiles from TRaSH Guides to Sonarr/Radarr
+  # This ensures you get the best quality releases
+  # Runs on a schedule (default: daily at 4am)
+  # ---------------------------------------------------------------------------
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:latest
+    container_name: recyclarr
+    hostname: recyclarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - TZ=${TZ}
+      - CRON_SCHEDULE=0 4 * * *
+    volumes:
+      - ${APPDATA_PATH}/recyclarr:/config
+    # Note: You need to create recyclarr.yml config file
+    # See: https://recyclarr.dev/wiki/yaml/configuration-reference/
+
+  # ---------------------------------------------------------------------------
+  # FlareSolverr - Cloudflare Bypass (Optional)
+  # ---------------------------------------------------------------------------
+  # Some indexers are protected by Cloudflare.
+  # Note: FlareSolverr may not work reliably. Consider Byparr as alternative.
+  # Only enable if you have indexers that require it.
+  # ---------------------------------------------------------------------------
+  # flaresolverr:
+  #   image: ghcr.io/flaresolverr/flaresolverr:latest
+  #   container_name: flaresolverr
+  #   hostname: flaresolverr
+  #   restart: unless-stopped
+  #   networks:
+  #     - homeserver
+  #   ports:
+  #     - "8191:8191"
+  #   environment:
+  #     - TZ=${TZ}
+  #     - LOG_LEVEL=info
+
+  # ---------------------------------------------------------------------------
+  # Byparr - FlareSolverr Alternative (Optional)
+  # ---------------------------------------------------------------------------
+  # More modern Cloudflare bypass using Camoufox
+  # Drop-in replacement for FlareSolverr
+  # ---------------------------------------------------------------------------
+  # byparr:
+  #   image: ghcr.io/manudevcode/byparr:latest
+  #   container_name: byparr
+  #   hostname: byparr
+  #   restart: unless-stopped
+  #   networks:
+  #     - homeserver
+  #   ports:
+  #     - "8191:8191"
+  #   environment:
+  #     - TZ=${TZ}

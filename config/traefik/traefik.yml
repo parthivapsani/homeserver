@@ -1,0 +1,41 @@
+# =============================================================================
+# TRAEFIK STATIC CONFIGURATION (Optional)
+# =============================================================================
+# This file is optional - the docker-compose command arguments handle most config
+# Use this for advanced configuration
+# =============================================================================
+
+api:
+  dashboard: true
+  insecure: true  # Set to false in production, use authentication
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: homeserver
+
+certificatesResolvers:
+  cloudflare:
+    acme:
+      email: admin@yourdomain.com
+      storage: /acme.json
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - "1.1.1.1:53"
+          - "8.8.8.8:53"
+
+log:
+  level: INFO

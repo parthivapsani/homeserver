@@ -1,0 +1,133 @@
+# =============================================================================
+# PHOTO MANAGEMENT
+# =============================================================================
+# - Immich: Self-hosted Google Photos alternative
+#   - Face recognition, location mapping, timeline view
+#   - iOS/Android apps with auto-upload
+#   - ML-powered search
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Immich Server
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:2283
+  # First user to register becomes admin
+  # ---------------------------------------------------------------------------
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: immich-server
+    hostname: immich-server
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${IMMICH_PORT:-2283}:2283"
+    environment:
+      - TZ=${TZ}
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=immich-redis
+      - REDIS_PASSWORD=${IMMICH_REDIS_PASSWORD}
+      - IMMICH_MACHINE_LEARNING_URL=http://immich-machine-learning:3003
+      - UPLOAD_LOCATION=/usr/src/app/upload
+    volumes:
+      - ${PHOTOS_PATH}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - immich-redis
+      - immich-postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.immich.rule=Host(`photos.${DOMAIN}`)"
+      - "traefik.http.routers.immich.entrypoints=websecure"
+      - "traefik.http.routers.immich.tls.certresolver=cloudflare"
+      - "traefik.http.services.immich.loadbalancer.server.port=2283"
+
+  # ---------------------------------------------------------------------------
+  # Immich Machine Learning
+  # ---------------------------------------------------------------------------
+  # Handles face recognition, smart search, etc.
+  # Can use GPU for faster processing (uncomment deploy section)
+  # ---------------------------------------------------------------------------
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:release
+    container_name: immich-machine-learning
+    hostname: immich-machine-learning
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - TZ=${TZ}
+      - IMMICH_HOST=immich-server
+      - IMMICH_PORT=2283
+    volumes:
+      - ${APPDATA_PATH}/immich/model-cache:/cache
+    # Uncomment for GPU acceleration (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # Immich Redis
+  # ---------------------------------------------------------------------------
+  immich-redis:
+    image: redis:7-alpine
+    container_name: immich-redis
+    hostname: immich-redis
+    restart: unless-stopped
+    networks:
+      - homeserver
+    command: redis-server --requirepass ${IMMICH_REDIS_PASSWORD}
+    volumes:
+      - immich_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${IMMICH_REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Immich PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  immich-postgres:
+    image: tensorchord/pgvecto-rs:pg14-v0.2.0
+    container_name: immich-postgres
+    hostname: immich-postgres
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${IMMICH_DB_PASSWORD}
+      - POSTGRES_DB=immich
+      - POSTGRES_INITDB_ARGS='--data-checksums'
+    volumes:
+      - immich_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d immich"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      [
+        "postgres",
+        "-c",
+        "shared_preload_libraries=vectors.so",
+        "-c",
+        "search_path=\"$$user\", public, vectors",
+        "-c",
+        "logging_collector=on",
+        "-c",
+        "max_wal_size=2GB",
+        "-c",
+        "shared_buffers=512MB",
+        "-c",
+        "wal_compression=on",
+      ]

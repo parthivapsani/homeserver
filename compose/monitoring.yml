@@ -1,0 +1,119 @@
+# =============================================================================
+# MONITORING & MANAGEMENT
+# =============================================================================
+# - Uptime Kuma: Service monitoring & status page
+# - Homepage: Dashboard for all services
+# - Watchtower: Automatic container updates
+# - Portainer: Docker management UI (optional)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Uptime Kuma - Service Monitoring
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:3001
+  # Monitor all your services, get alerts when something goes down
+  # ---------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    hostname: uptime-kuma
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "3001:3001"
+    volumes:
+      - ${APPDATA_PATH}/uptime-kuma:/app/data
+      # Uncomment to monitor Docker containers directly
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime.rule=Host(`status.${DOMAIN}`)"
+      - "traefik.http.routers.uptime.entrypoints=websecure"
+      - "traefik.http.routers.uptime.tls.certresolver=cloudflare"
+      - "traefik.http.services.uptime.loadbalancer.server.port=3001"
+
+  # ---------------------------------------------------------------------------
+  # Homepage - Service Dashboard
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:3002
+  # Beautiful dashboard with service integrations
+  # Requires YAML configuration (see config/homepage/)
+  # ---------------------------------------------------------------------------
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    hostname: homepage
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "3002:3000"
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ${APPDATA_PATH}/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homepage.rule=Host(`home.${DOMAIN}`)"
+      - "traefik.http.routers.homepage.entrypoints=websecure"
+      - "traefik.http.routers.homepage.tls.certresolver=cloudflare"
+      - "traefik.http.services.homepage.loadbalancer.server.port=3000"
+
+  # ---------------------------------------------------------------------------
+  # Watchtower - Automatic Updates
+  # ---------------------------------------------------------------------------
+  # Automatically updates Docker containers when new images are available
+  # Runs daily at 4am by default
+  # ---------------------------------------------------------------------------
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    hostname: watchtower
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - TZ=${TZ}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400  # Check daily (seconds)
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *  # 4am daily (cron format)
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_REVIVE_STOPPED=false
+      # Uncomment for notifications
+      # - WATCHTOWER_NOTIFICATIONS=email
+      # - WATCHTOWER_NOTIFICATION_EMAIL_FROM=watchtower@${DOMAIN}
+      # - WATCHTOWER_NOTIFICATION_EMAIL_TO=you@email.com
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ---------------------------------------------------------------------------
+  # Portainer - Docker Management UI (Optional)
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:9000
+  # Visual management of Docker containers, images, networks
+  # Useful for beginners, but not required
+  # ---------------------------------------------------------------------------
+  # portainer:
+  #   image: portainer/portainer-ce:latest
+  #   container_name: portainer
+  #   hostname: portainer
+  #   restart: unless-stopped
+  #   networks:
+  #     - homeserver
+  #   ports:
+  #     - "9000:9000"
+  #     - "9443:9443"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - ${APPDATA_PATH}/portainer:/data
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN}`)"
+  #     - "traefik.http.routers.portainer.entrypoints=websecure"
+  #     - "traefik.http.routers.portainer.tls.certresolver=cloudflare"
+  #     - "traefik.http.services.portainer.loadbalancer.server.port=9000"

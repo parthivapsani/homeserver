@@ -1,0 +1,132 @@
+# =============================================================================
+# VPN & DOWNLOAD CLIENTS
+# =============================================================================
+# - Gluetun: VPN container (Mullvad) with kill switch
+# - qBittorrent: Torrent client (routed through VPN)
+# - SABnzbd: Usenet client (routed through VPN)
+# - Prowlarr: Indexer manager (routed through VPN)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Gluetun - VPN Client Container
+  # ---------------------------------------------------------------------------
+  # All download containers route through this
+  # Kill switch ensures no traffic leaks if VPN drops
+  # ---------------------------------------------------------------------------
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    hostname: gluetun
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - vpn
+      - homeserver
+    ports:
+      # qBittorrent
+      - "${QBITTORRENT_PORT:-8080}:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+      # SABnzbd
+      - "${SABNZBD_PORT:-8081}:8081"
+      # Prowlarr
+      - "${PROWLARR_PORT:-9696}:9696"
+    environment:
+      - TZ=${TZ}
+      # Mullvad VPN Configuration
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-mullvad}
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=${SERVER_COUNTRIES:-USA}
+      # Firewall - allow local network access to WebUIs
+      - FIREWALL_OUTBOUND_SUBNETS=172.20.0.0/16,192.168.0.0/16
+      # Health check
+      - HEALTH_VPN_DURATION_INITIAL=30s
+      - HEALTH_SUCCESS_WAIT_DURATION=10s
+    volumes:
+      - ${APPDATA_PATH}/gluetun:/gluetun
+    healthcheck:
+      test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=false"
+
+  # ---------------------------------------------------------------------------
+  # qBittorrent - Torrent Client
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8080
+  # Default credentials: admin / adminadmin (change immediately!)
+  # Routes through Gluetun VPN
+  # ---------------------------------------------------------------------------
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    hostname: qbittorrent
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - ${APPDATA_PATH}/qbittorrent:/config
+      - ${DOWNLOADS_PATH}:/downloads
+      - ${MEDIA_PATH}:/media
+
+  # ---------------------------------------------------------------------------
+  # SABnzbd - Usenet Client
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8081
+  # Routes through Gluetun VPN
+  # ---------------------------------------------------------------------------
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    hostname: sabnzbd
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/sabnzbd:/config
+      - ${DOWNLOADS_PATH}:/downloads
+      - ${MEDIA_PATH}:/media
+
+  # ---------------------------------------------------------------------------
+  # Prowlarr - Indexer Manager
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:9696
+  # Manages indexers for Sonarr, Radarr, Lidarr, Readarr
+  # Routes through Gluetun VPN for indexer access
+  # ---------------------------------------------------------------------------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    hostname: prowlarr
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/prowlarr:/config

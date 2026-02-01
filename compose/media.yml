@@ -1,0 +1,222 @@
+# =============================================================================
+# MEDIA AUTOMATION & PLAYBACK
+# =============================================================================
+# - Sonarr: TV show automation
+# - Radarr: Movie automation
+# - Lidarr: Music automation
+# - Readarr: Book/audiobook automation
+# - Jellyfin: Media server with Live TV/DVR
+# - Audiobookshelf: Audiobook & podcast server
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Sonarr - TV Show Management
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8989
+  # ---------------------------------------------------------------------------
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    hostname: sonarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${SONARR_PORT:-8989}:8989"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/sonarr:/config
+      - ${MEDIA_PATH}:/media
+      - ${DOWNLOADS_PATH}:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sonarr.rule=Host(`sonarr.${DOMAIN}`)"
+      - "traefik.http.routers.sonarr.entrypoints=websecure"
+      - "traefik.http.routers.sonarr.tls.certresolver=cloudflare"
+      - "traefik.http.services.sonarr.loadbalancer.server.port=8989"
+
+  # ---------------------------------------------------------------------------
+  # Radarr - Movie Management
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:7878
+  # ---------------------------------------------------------------------------
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    hostname: radarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${RADARR_PORT:-7878}:7878"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/radarr:/config
+      - ${MEDIA_PATH}:/media
+      - ${DOWNLOADS_PATH}:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.radarr.rule=Host(`radarr.${DOMAIN}`)"
+      - "traefik.http.routers.radarr.entrypoints=websecure"
+      - "traefik.http.routers.radarr.tls.certresolver=cloudflare"
+      - "traefik.http.services.radarr.loadbalancer.server.port=7878"
+
+  # ---------------------------------------------------------------------------
+  # Lidarr - Music Management
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8686
+  # ---------------------------------------------------------------------------
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    hostname: lidarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${LIDARR_PORT:-8686}:8686"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/lidarr:/config
+      - ${MEDIA_PATH}:/media
+      - ${DOWNLOADS_PATH}:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.lidarr.rule=Host(`lidarr.${DOMAIN}`)"
+      - "traefik.http.routers.lidarr.entrypoints=websecure"
+      - "traefik.http.routers.lidarr.tls.certresolver=cloudflare"
+      - "traefik.http.services.lidarr.loadbalancer.server.port=8686"
+
+  # ---------------------------------------------------------------------------
+  # Readarr - Book & Audiobook Management
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8787
+  # ---------------------------------------------------------------------------
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    hostname: readarr
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${READARR_PORT:-8787}:8787"
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/readarr:/config
+      - ${MEDIA_PATH}:/media
+      - ${DOWNLOADS_PATH}:/downloads
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.readarr.rule=Host(`readarr.${DOMAIN}`)"
+      - "traefik.http.routers.readarr.entrypoints=websecure"
+      - "traefik.http.routers.readarr.tls.certresolver=cloudflare"
+      - "traefik.http.services.readarr.loadbalancer.server.port=8787"
+
+  # ---------------------------------------------------------------------------
+  # Jellyfin - Media Server
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8096
+  # Supports Live TV/DVR with HDHomeRun
+  # Hardware transcoding: Intel Quick Sync (iGPU passthrough)
+  # ---------------------------------------------------------------------------
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    hostname: jellyfin
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+      - "8920:8920"                          # HTTPS
+      - "7359:7359/udp"                      # Client discovery
+      - "1900:1900/udp"                      # DLNA
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - JELLYFIN_PublishedServerUrl=https://jellyfin.${DOMAIN}
+    volumes:
+      - ${APPDATA_PATH}/jellyfin:/config
+      - ${MEDIA_PATH}:/media:ro
+      - ${APPDATA_PATH}/jellyfin/cache:/cache
+      # For TV Guide data (optional)
+      - ${APPDATA_PATH}/jellyfin/tvguide:/tvguide
+    # Intel Quick Sync hardware transcoding
+    # Uncomment the following for iGPU passthrough
+    devices:
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/card0:/dev/dri/card0
+    group_add:
+      - "109"  # render group - may need to adjust for your system
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jellyfin.rule=Host(`jellyfin.${DOMAIN}`)"
+      - "traefik.http.routers.jellyfin.entrypoints=websecure"
+      - "traefik.http.routers.jellyfin.tls.certresolver=cloudflare"
+      - "traefik.http.services.jellyfin.loadbalancer.server.port=8096"
+
+  # ---------------------------------------------------------------------------
+  # Audiobookshelf - Audiobook & Podcast Server
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:13378
+  # Mobile apps available for iOS and Android
+  # ---------------------------------------------------------------------------
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    container_name: audiobookshelf
+    hostname: audiobookshelf
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${AUDIOBOOKSHELF_PORT:-13378}:80"
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/audiobookshelf:/config
+      - ${MEDIA_PATH}/audiobooks:/audiobooks
+      - ${MEDIA_PATH}/podcasts:/podcasts
+      - ${APPDATA_PATH}/audiobookshelf/metadata:/metadata
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.audiobookshelf.rule=Host(`audiobooks.${DOMAIN}`)"
+      - "traefik.http.routers.audiobookshelf.entrypoints=websecure"
+      - "traefik.http.routers.audiobookshelf.tls.certresolver=cloudflare"
+      - "traefik.http.services.audiobookshelf.loadbalancer.server.port=80"
+
+  # ---------------------------------------------------------------------------
+  # zap2xml - Free TV Guide Data (Optional)
+  # ---------------------------------------------------------------------------
+  # Generates XMLTV data for Jellyfin Live TV
+  # Alternative to paid Schedules Direct ($25/year)
+  # ---------------------------------------------------------------------------
+  zap2xml:
+    image: shuaiscott/zap2xml:latest
+    container_name: zap2xml
+    hostname: zap2xml
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - TZ=${TZ}
+      # Create free account at https://tvlistings.zap2it.com
+      - USERNAME=your_zap2it_email
+      - PASSWORD=your_zap2it_password
+      - OPT_ARGS=-I -D
+    volumes:
+      - ${APPDATA_PATH}/jellyfin/tvguide:/data

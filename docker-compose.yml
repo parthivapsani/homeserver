@@ -1,0 +1,50 @@
+# =============================================================================
+# HOME SERVER - MAIN DOCKER COMPOSE
+# =============================================================================
+#
+# This is the main entry point that includes all service modules.
+#
+# Usage:
+#   docker compose up -d                    # Start all services
+#   docker compose up -d jellyfin sonarr    # Start specific services
+#   docker compose --profile downloads up -d # Start profile group
+#   docker compose logs -f jellyfin         # View logs
+#   docker compose pull                     # Update all images
+#
+# =============================================================================
+
+include:
+  - compose/core.yml
+  - compose/vpn-downloads.yml
+  - compose/media.yml
+  - compose/requests.yml
+  - compose/photos.yml
+  - compose/home-automation.yml
+  - compose/utilities.yml
+  - compose/monitoring.yml
+
+# =============================================================================
+# SHARED NETWORKS
+# =============================================================================
+networks:
+  # Main network for inter-container communication
+  homeserver:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+  # Isolated network for VPN-routed containers
+  vpn:
+    driver: bridge
+
+# =============================================================================
+# SHARED VOLUMES
+# =============================================================================
+volumes:
+  # Persistent volumes for databases
+  immich_postgres:
+  immich_redis:
+  firefly_postgres:
+  mosquitto_data:
+  mosquitto_logs:

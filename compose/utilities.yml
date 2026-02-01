@@ -1,0 +1,163 @@
+# =============================================================================
+# UTILITIES
+# =============================================================================
+# - Vaultwarden: Self-hosted Bitwarden password manager
+# - Firefly III: Personal finance management
+# - Samba: File sharing + Time Machine backups
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Vaultwarden - Password Manager
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8222
+  # IMPORTANT: Requires HTTPS for browser extensions to work
+  # First user to register becomes admin
+  # ---------------------------------------------------------------------------
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    hostname: vaultwarden
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${VAULTWARDEN_PORT:-8222}:80"
+    environment:
+      - TZ=${TZ}
+      - DOMAIN=https://vault.${DOMAIN}
+      - SIGNUPS_ALLOWED=true              # Set to false after creating accounts
+      - INVITATIONS_ALLOWED=true
+      - WEBSOCKET_ENABLED=true
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN:-}  # Set for admin panel access
+      - LOG_LEVEL=info
+    volumes:
+      - ${APPDATA_PATH}/vaultwarden:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`vault.${DOMAIN}`)"
+      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden.tls.certresolver=cloudflare"
+      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+      # WebSocket support
+      - "traefik.http.routers.vaultwarden-ws.rule=Host(`vault.${DOMAIN}`) && Path(`/notifications/hub`)"
+      - "traefik.http.routers.vaultwarden-ws.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden-ws.tls.certresolver=cloudflare"
+      - "traefik.http.services.vaultwarden-ws.loadbalancer.server.port=3012"
+
+  # ---------------------------------------------------------------------------
+  # Firefly III - Personal Finance Manager
+  # ---------------------------------------------------------------------------
+  # Access: http://server-ip:8223
+  # First user to register becomes admin
+  # ---------------------------------------------------------------------------
+  firefly:
+    image: fireflyiii/core:latest
+    container_name: firefly
+    hostname: firefly
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "${FIREFLY_PORT:-8223}:8080"
+    environment:
+      - TZ=${TZ}
+      - APP_KEY=${FIREFLY_APP_KEY}
+      - APP_URL=https://finance.${DOMAIN}
+      - TRUSTED_PROXIES=**
+      - DB_CONNECTION=pgsql
+      - DB_HOST=firefly-postgres
+      - DB_PORT=5432
+      - DB_DATABASE=firefly
+      - DB_USERNAME=firefly
+      - DB_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - MAIL_MAILER=log
+    volumes:
+      - ${APPDATA_PATH}/firefly/upload:/var/www/html/storage/upload
+    depends_on:
+      - firefly-postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.firefly.rule=Host(`finance.${DOMAIN}`)"
+      - "traefik.http.routers.firefly.entrypoints=websecure"
+      - "traefik.http.routers.firefly.tls.certresolver=cloudflare"
+      - "traefik.http.services.firefly.loadbalancer.server.port=8080"
+
+  # ---------------------------------------------------------------------------
+  # Firefly III PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  firefly-postgres:
+    image: postgres:15-alpine
+    container_name: firefly-postgres
+    hostname: firefly-postgres
+    restart: unless-stopped
+    networks:
+      - homeserver
+    environment:
+      - POSTGRES_USER=firefly
+      - POSTGRES_PASSWORD=${FIREFLY_DB_PASSWORD}
+      - POSTGRES_DB=firefly
+    volumes:
+      - firefly_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firefly -d firefly"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Samba - File Sharing & Time Machine
+  # ---------------------------------------------------------------------------
+  # Provides:
+  #   - Time Machine backup target for Macs
+  #   - General NAS file sharing
+  #   - Footage backup storage
+  # ---------------------------------------------------------------------------
+  samba:
+    image: dperson/samba:latest
+    container_name: samba
+    hostname: samba
+    restart: unless-stopped
+    networks:
+      - homeserver
+    ports:
+      - "137:137/udp"
+      - "138:138/udp"
+      - "139:139/tcp"
+      - "445:445/tcp"
+    environment:
+      - TZ=${TZ}
+      - USERID=${PUID}
+      - GROUPID=${PGID}
+      # Create users: -u "username;password"
+      - USER=homeserver;changeme123
+      # Share definitions: -s "name;path;browse;readonly;guest;users;admins;writelist;comment"
+      - SHARE1=media;/media;yes;no;no;homeserver;;;Media Library
+      - SHARE2=backups;/backups;yes;no;no;homeserver;;;Backup Storage
+      - SHARE3=timemachine;/timemachine;yes;no;no;homeserver;;;Time Machine
+      # Enable Time Machine
+      - GLOBAL=fruit:time machine = yes
+      - GLOBAL1=fruit:metadata = stream
+      - GLOBAL2=fruit:model = MacSamba
+      - GLOBAL3=vfs objects = fruit streams_xattr
+    volumes:
+      - ${MEDIA_PATH}:/media
+      - ${BACKUP_PATH}:/backups
+      - ${BACKUP_PATH}/timemachine:/timemachine
+    # Note: For production, consider using the config file approach below
+
+  # ---------------------------------------------------------------------------
+  # Avahi - mDNS/Bonjour for Time Machine Discovery
+  # ---------------------------------------------------------------------------
+  # Allows Macs to automatically discover Time Machine backup destination
+  # ---------------------------------------------------------------------------
+  avahi:
+    image: flungo/avahi:latest
+    container_name: avahi
+    hostname: ${HOSTNAME:-homeserver}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA_PATH}/avahi:/etc/avahi/services
