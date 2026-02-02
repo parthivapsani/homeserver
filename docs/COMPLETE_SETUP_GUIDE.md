@@ -29,16 +29,20 @@ This guide walks you through every step from an unassembled PC to a fully functi
 |-----------|---------------|---------|
 | CPU | Intel Core i5-12400 or i5-13400 | Quick Sync for transcoding |
 | Motherboard | B660/B760 with 6+ SATA ports | Storage connectivity |
-| RAM | 64GB DDR4-3200 (2x32GB) | Containers + Immich ML |
+| RAM | **32GB DDR4-3200 (2x16GB)** | Containers + Immich ML |
 | Boot SSD | 500GB NVMe | Proxmox OS |
 | Cache SSD | 1-2TB NVMe | Docker appdata, downloads |
 | Media HDDs | 3-4x 12-18TB | Movies, TV, photos, backups |
 | Parity HDD | 1x matching size | Data protection |
 | Case | Fractal Node 804 or Define 7 | Many drive bays |
 | PSU | 550W 80+ Gold | Reliable power |
-| Network | 2.5GbE NIC (if not on motherboard) | Fast local transfers |
-| UPS | 750VA+ | Power protection |
+| Network | 1GbE or 2.5GbE | 1GbE is sufficient for most use |
+| UPS | 750VA+ (USB connected) | Power protection + NUT integration |
 | USB Drive | 8GB+ | Proxmox installer |
+
+**RAM Note**: 32GB is sufficient for this workload (~14GB active usage). Only get 64GB if you plan to run multiple VMs, use ZFS with large ARC cache, or add significant additional workloads.
+
+**Power Consumption**: Expect 40-60W idle, 80-120W under load. Annual cost: ~$65-85.
 
 ### Assembly Steps
 
@@ -311,7 +315,7 @@ wget https://releases.ubuntu.com/22.04/ubuntu-22.04.4-live-server-amd64.iso
 - Type: host
 
 **Memory tab:**
-- Memory: 61440 MB (60GB - leave some for Proxmox)
+- Memory: 28672 MB (28GB - leave 4GB for Proxmox)
 - Ballooning: Uncheck
 
 **Network tab:**
